@@ -3,11 +3,11 @@
 ### 1. Download the FASTA and GFF files from the [*P. patens* Gene Model Lookup Database](https://peatmoss.plantcode.cup.uni-freiburg.de/ppatens_db/downloads.php) and the CORE collection of plant motiffs from [JASPAR2022](https://jaspar2022.genereg.net/)
 [Accessed 2024/09/04]
 
-FASTA: https://peatmoss.plantcode.cup.uni-freiburg.de/downloads/Genome%20sequences/P.patens_v6/P.patens_v6_genome.fna.gz
+FASTA: [P.patens_v6_genome.fna.gz](https://peatmoss.plantcode.cup.uni-freiburg.de/downloads/Genome%20sequences/P.patens_v6/P.patens_v6_genome.fna.gz)
 
-GFF: https://peatmoss.plantcode.cup.uni-freiburg.de/downloads/Annotations/P.patens_v6/P.patens_genome_annotation_v6.gff.gz
+GFF: [P.patens_genome_annotation_v6.gff.gz](https://peatmoss.plantcode.cup.uni-freiburg.de/downloads/Annotations/P.patens_v6/P.patens_genome_annotation_v6.gff.gz)
 
-JASPAR Motifs: https://jaspar2022.genereg.net/download/data/2022/CORE/JASPAR2022_CORE_non-redundant_pfms_jaspar.txt
+JASPAR Motifs: [JASPAR2022_CORE_non-redundant_pfms_jaspar.txt](https://jaspar2022.genereg.net/download/data/2022/CORE/JASPAR2022_CORE_non-redundant_pfms_jaspar.txt)
 
 ### 2. Remove Unneeded Attributes
 Command:
@@ -19,35 +19,35 @@ Command:
 ```bash
 agat_convert_sp_gff2gtf.pl --gff P.patens_genome_annotation_v6_essentialAttr.gff --outfile P.patens_genome_annotation_v6.gtf
 ```
-### 4. Generate Reference with 10x Makeref
+### 4. Generate Reference with 10x mkref
 Create ppatensv6.config file:
-```json
+```
 {
-   organism: "P. patens",
-   genome : ["Ppatens_v6"],
-   input_fasta : ["../Physcogenome/Version6/P.patens_v6_genome.fna"],
-   input_gtf : ["../Physcogenome/Version6/P.patens_genome_annotation_v6.gtf"],
-   input_motifs : "../Physcogenome/Motifs/JASPAR2022_CORE_plants_non-redundant_pfms_jaspar.txt"
+   organism: "P. patens"
+   genome : ["Ppatens_v6"]
+   input_fasta : ["/mnt/gpfsA/home/devil/Physcogenome/Version6/P.patens_v6_genome.fna"]
+   input_gtf : ["/mnt/gpfsA/home/devil/Physcogenome/Version6/P.patens_genome_annotation_v6.gtf"]
+   input_motifs : "/mnt/gpfsA/home/devil/Physcogenome/Motifs/JASPAR2022_CORE_plants_non-redundant_pfms_jaspar.txt"
 }
 ```
 Command:
 ```bash
 ../10xGenomics/cellranger-arc-2.0.2/cellranger-arc mkref --config=../ppatensv6.config --memgb=40
 ```
-### 5. Specify raw data
+### 5.  Libraries CSV files
 
-# Data Access
+#### Data Access
 
 The raw data used in this project is too large to be hosted on GitHub. You can access the raw data files from the following location:
 [to be added, URL to ddbj]
 
-Make a directory of files specifying the type and location of sequencing data for executing Cellranger-ARC 2.0.2
+Make a directory of CSV files specifying the type and location of sequencing data for executing Cellranger-ARC 2.0.2
 
 e.g. sample_Wt_T0.csv
 ```csv
 fastqs,sample,library_type
-../home/MultiomeProject/Raw_Data/F22FTSAPJT0200_LIBrlvkR/Wt_T0_GEx,Wt_T00_GEx,Gene Expression
-../home/MultiomeProject/Raw_Data/F22FTSAPJT0200_LIBrlvkR/Wt_T0_ATAC,Wt_T00_ATAC,Chromatin Accessibility
+../home/MultiomeProject/Raw_Data/F22FTSAPJT0200_LIBrlvkR/Wt_T0_GEx,Wt_T0_GEx,Gene Expression
+../home/MultiomeProject/Raw_Data/F22FTSAPJT0200_LIBrlvkR/Wt_T0_ATAC,Wt_T0_ATAC,Chromatin Accessibility
 ```
 Sample File Names
 
