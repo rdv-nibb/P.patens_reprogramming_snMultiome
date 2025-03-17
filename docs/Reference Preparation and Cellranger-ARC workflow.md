@@ -88,7 +88,7 @@ Submit PBS job.
 ```bash
 runCellRanger-arc.pbs
 ```
-
+Following above, run mainRScript.R, to generate normalised and batch corrected Seurat/Signac object.
 
 
 
