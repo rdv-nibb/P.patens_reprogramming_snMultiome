@@ -1,0 +1,493 @@
+---
+title: "Figure_Processing_for_Manuscript"
+output: html_notebook
+---
+
+## Load Essential Packages
+```{r load packages}
+
+# Install and load required packages
+# pacman::p_load() helps manage package installation and loading
+
+pacman::p_load(tidyverse, ggpubr, viridis, ggrepel)
+```
+
+
+## Load Preprocessed Data
+```{r load data}
+# Increase memory size and load preprocessed Seurat object for analysis
+mem.maxVSize(100000)
+Project_Path <- "/Users/Ruan/Google Drive/My Drive/NIBB/Reprogramming P. patens Multiome/"
+load(paste0(Project_Path, "PreprocessedSeurat_v6_240910.RData"))
+```
+## Custer UMAPs
+```{r cluster coloured UMAPs}
+if(DefaultAssay(ppsn) != "SCT"){DefaultAssay(ppsn) <- "SCT"}
+
+# Generate UMAP plots for different data types (GEX, WNN, ATAC) with cluster colouring superimposed
+
+# Gene expression UMAP Plot
+
+GEX_cluster_plot <- DimPlot(ppsn, reduction = "gex_umap", group.by = "wsnn_res.0.4") +
+  theme_void()+ggtitle(NULL)
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure1b_GEX_Clusters_UMAP.svg"),
+                plot = GEX_cluster_plot+theme(legend.position = "none"), 
+                height = 5, width = 5, units = "cm")
+
+# Weighted nearest-neighbour UMAP plot
+
+WNN_cluster_plot <- DimPlot(ppsn, reduction = "umap", group.by = "wsnn_res.0.4", label = T, label.size = 5) +
+  theme_void()+ggtitle(NULL)
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure1c_WNN_Clusters_UMAP.svg"),
+                plot = WNN_cluster_plot+theme(legend.position = "none"), 
+                height = 5, width = 5, units = "cm")
+
+# ATAC UMAP
+
+ATAC_cluster_plot <- DimPlot(ppsn, reduction = "atac_umap", group.by = "wsnn_res.0.4") +
+  theme_void()+ggtitle(NULL)
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure1d_GEX_Clusters_UMAP.svg"),
+                plot = ATAC_cluster_plot+theme(legend.position = "none"), 
+                height = 5, width = 5, units = "cm")
+
+# All samples combined WNN UMAPs, split by time
+
+WNN_time.split_cluster_plot <- DimPlot(ppsn, reduction = "umap", 
+                                        group.by = "wsnn_res.0.4", split.by = "extended_times") +
+  ggtitle(NULL)
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure1d_time.split_WNN_UMAP.svg"),
+                plot = WNN_time.split_cluster_plot+theme(legend.position = "none"), 
+                height = 8, width = 20, units = "cm")
+
+# Wild type samples WNN UMAPs, split by time
+
+wt_WNN_time.split_cluster_plot <- DimPlot(wt_ppsn, reduction = "umap", 
+                                        group.by = "wsnn_res.0.4", split.by = "extended_times") +
+  ggtitle("Wild type")
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure2a_time.split_wt_WNN_UMAP.svg"),
+                plot = wt_WNN_time.split_cluster_plot+theme(legend.position = "none"), 
+                height = 8, width = 20, units = "cm")
+
+# ∆stemin samples WNN UMAPs, split by time
+
+ste_WNN_time.split_cluster_plot <- DimPlot(ste_ppsn, reduction = "umap", group.by = "wsnn_res.0.4", split.by = "extended_times") +
+  ggtitle("∆stemin")
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure2b_time.split_ste_WNN_UMAP.svg"),
+                plot = ste_WNN_time.split_cluster_plot+theme(legend.position = "none"), 
+                height = 8, width = 20, units = "cm")
+
+# Legend for all weighted shared nearest-neigbour coloured plots
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure1b-d_clusterLegend.svg"),
+                plot = get_legend(WNN_cluster_plot)%>%as_ggplot(),
+                height = 7, width = 2, units = "cm")
+```
+
+## Bargraphs
+
+```{r cluster stacked bargraphs}
+# Function to draw bar graphs of relative cluster representation over time
+
+drawBarGraph <- function(seurat_obj){
+  cluster_bargraph <- data.frame(
+    Time = seurat_obj$extended_times %>% 
+      str_replace("p", "\np") %>% 
+      factor(c("T0", "T3;4.5;6", "T10;12;14","T24;36;\nprotonema")),
+    Genotype = seurat_obj$genotype,
+    Cluster = seurat_obj$wsnn_res.0.4
+    ) %>%
+    group_by(Time, Cluster) %>% summarize(n = n(), .groups = "drop") %>%
+    group_by(Time) %>% mutate(`% Cells in cluster` = n / sum(n) * 100) %>%
+    ggplot(aes(x = Time, y = `% Cells in cluster`, fill = Cluster)) +
+    geom_bar(stat = "identity",position = "stack",color = "white", linewidth = .1) +
+    theme(axis.text.x = element_text(angle = 60, hjust = 0.5, vjust = 0.5, size = 7),
+          legend.position = "none",
+          axis.title.x = element_blank()
+          )
+  return(cluster_bargraph)
+}
+
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure1f_cluster.time_bargraph.svg"),
+  plot = drawBarGraph(ppsn),
+  height = 6, width = 4, units = "cm"
+)
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure2c_wt_cluster.time_bargraph.svg"),
+  plot = drawBarGraph(wt_ppsn),
+  height = 6, width = 4, units = "cm"
+)
+
+ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Figure2d_ste_cluster.time_bargraph.svg"),
+  plot = drawBarGraph(ste_ppsn),
+  height = 6, width = 4, units = "cm"
+)
+```
+
+## Published Annotations
+
+```{r load annotation}
+# Load annotation data from supplementary tables and prepare for analysis
+# 'published' contains gene ID mappings (Gene_IDv6) and associated annotations (Gene_Name)
+
+pacman::p_load("xlsx")
+
+published <-
+  xlsx::read.xlsx(
+    paste0(Project_Path,"Annotated_Cited.xlsx"), #sheet 4 of supplementary tables
+    sheetIndex = 1, trim = T
+  ) %>% as.data.frame() %>% .[,c(1,2,4)] %>% mutate(Gene_IDv6 = str_replace(Gene_IDv6, '_','-'))
+
+nametoID <- function(gene_name = NULL){
+  if(is.null(gene_name)){stop("Need a gene name. Maybe check the \"published\" object for ideas...")}
+  gene_id = published$Gene_IDv6[published$Gene_Name %in% gene_name]
+  return(gene_id)}
+```
+
+## UMAPs of GEx
+```{r UMAPS coloured by gene expression}
+# Function to create UMAP plots of gene expression levels
+# If requested, plots can be split by genotype
+
+create_feature_plots <- function(save_directory, facet_by_genotype = FALSE) {
+
+  # Iterate over the rows in the 'published' dataframe
+  for(i in 1:nrow(published)) {
+    if(published$Gene_IDv6[i] %in% rownames(ppsn@assays$SCT)) {
+      assay <- "SCT"
+      data <- data.frame(genotype = ppsn@meta.data$genotype,
+                         expression = ppsn@assays$SCT@data[published$Gene_IDv6[i],],
+                         umap1 = ppsn@reductions$umap@cell.embeddings[,1],
+                         umap2 = ppsn@reductions$umap@cell.embeddings[,2])
+    } else {
+      assay <- "RNA"
+      data <- data.frame(genotype = ppsn@meta.data$genotype,
+                         expression = ppsn@assays$RNA@data[published$Gene_IDv6[i],],
+                         umap1 = ppsn@reductions$umap@cell.embeddings[,1],
+                         umap2 = ppsn@reductions$umap@cell.embeddings[,2])
+    }
+    
+    data <- arrange(data, expression)
+    
+    # Generate the feature plot
+    feature_plot <- ggplot(data, aes(x = umap1, y = umap2, colour = expression)) +
+      geom_point(size = 0.07) +
+      theme_void() +
+      labs(subtitle = published[i,2]) +
+      scale_color_gradientn(colors = viridis(n = 10, direction = -1), limits = c(0, 3)) &
+      theme(plot.title = element_text(size = 10),
+            plot.subtitle = element_text(size = 12, hjust = 0.5),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            axis.ticks = element_blank(),
+            axis.text = element_blank(),
+            panel.grid = element_blank())
+    
+    # Apply facet_wrap if requested
+  if(facet_by_genotype) {
+    feature_plot <- feature_plot + 
+      facet_wrap(~genotype) +
+      theme_void() +
+      theme(
+        plot.subtitle = element_text(size = 12, hjust = 0.55, vjust = -7),
+        strip.text = element_text(size = 10, margin = margin(t = 2, b = 2))
+      )
+  }
+
+    
+    # Save the plot
+    ggplot2::ggsave(filename = paste0(save_directory, "/",
+                                      i, "_",
+                                      published$Gene_Name[i], "_",
+                                      assay, ".svg"),
+                    plot = feature_plot + theme(legend.position = "none"),
+                    height = 5, width = 7, units = "cm")
+  }
+}
+
+# Plots for figures 1g-q
+create_feature_plots(paste0(Project_Path,"Manuscript/Raw_Figures/Combined_Expression_UMAPs"), facet_by_genotype = FALSE)
+
+# Plots for figures 2e-l
+create_feature_plots(paste0(Project_Path,"Manuscript/Raw_Figures/Genotype.split_Expression_UMAPs"), facet_by_genotype = TRUE)
+```
+
+## DotPlots
+```{r DotPlots of gene expression}
+rawDotPlotData <- data.frame(row.names = colnames(ppsn))
+
+for (i in 1:nrow(published)) {
+  Gene_ID <- published$Gene_ID[i]
+  print(Gene_ID)
+  
+  slot <- "SCT"
+  addendum <- ""
+  
+  if (!Gene_ID %in% rownames(ppsn@assays$SCT)) {
+    message(paste(Gene_ID, "has no value in the SCT slot. Switching to RNA slot."))
+    slot <- "RNA"
+    addendum <- "rna_"
+  }
+  
+  rawDotPlotData[, paste0(addendum, Gene_ID)] <- ppsn[[slot]]@data[Gene_ID, ]
+}
+
+
+# Combined genotypes
+combinedDotPlotData <- rawDotPlotData %>%
+  bind_cols(wsnn_res.0.4 = ppsn$wsnn_res.0.4) %>%
+  pivot_longer(-c(wsnn_res.0.4), names_to = "gene", values_to="expression")%>%
+  group_by(wsnn_res.0.4, gene) %>%
+  summarise(Avg = mean(expression),
+            Pct = sum(expression > 0) / length(expression) * 100) %>%
+  ungroup() %>%
+  group_by(gene) %>%
+    mutate(normalised = Avg/max(Avg)) %>% 
+  left_join(published%>%dplyr::rename(gene = Gene_IDv6), by = "gene")
+
+# Split genotypes
+genotype.splitDotPlotData <- rawDotPlotData %>%
+  bind_cols(genotype = ppsn@meta.data$genotype) %>%
+  bind_cols(wsnn_res.0.4 = ppsn@meta.data$seurat_clusters) %>%
+  pivot_longer(-c(wsnn_res.0.4, genotype), names_to = "gene", values_to="expression")%>%
+  group_by(wsnn_res.0.4, genotype, gene) %>%
+  summarise(Avg = mean(expression),
+            Pct = sum(expression > 0) / length(expression) * 100) %>%
+  ungroup() %>%
+  group_by(gene) %>%
+    mutate(normalised = Avg/max(Avg)) %>% 
+  left_join(published[,c(1,2)]%>%dplyr::rename(gene = Gene_IDv6), by = "gene")
+
+
+drawAllDotPlots <- function(saveDir, plot_data, i) {
+  # Check if the dataset has the "genotype" column to determine combine status
+  combine <- !("genotype" %in% colnames(plot_data))
+  
+  GOI <- published$Gene_Name[i]
+  plot_data  <- plot_data %>% filter(Gene_Name %in% GOI)
+  
+  # Dynamically assign x-axis based on `combine` parameter
+  x.axis <- if (combine) {
+    sym("Gene_Name")
+  } else {
+    sym("genotype")
+  }
+  
+  # Create the plot
+  customDotPlot <- ggplot(plot_data, aes(x = !!x.axis, y = wsnn_res.0.4)) +
+    geom_point(aes(size = Pct, fill = Avg), shape = 21) +
+    scale_size("% Detected", range = c(0, 9), limits = c(0, 100)) +
+    labs(y = "Cluster") +
+    scale_y_discrete(limits = factor(10:0)) +
+    scale_fill_gradientn(
+      colours = viridisLite::mako(100),
+      trans = scales::log_trans(),
+      limits = c(0.001, 1),
+      guide = guide_colorbar(ticks.colour = "black", frame.colour = "black"),
+      name = "Normalized\nExpression"
+    ) +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.text.x = element_text(
+        hjust = 0.5, size = 5, margin = margin(t = 1, unit = "pt")
+      ),
+      plot.margin = unit(c(1, 0.5, 0.5, 0.5), "lines")
+    )
+  
+  # Additional modifications for combined plots
+  if (combine) {
+    customDotPlot <- customDotPlot +
+      labs(x = GOI)
+    plotWidth <- 1
+    savePath <- paste0(Project_Path, "Manuscript/Raw_Figures/Combined_DotPlots/")
+  } else {
+    customDotPlot <- customDotPlot +
+      ggtitle(GOI) +
+      theme(
+        plot.title = element_text(size = 5, hjust = 0.5, face = "bold"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, size = 5,margin = margin(t = 1, unit = "pt")
+      )
+      )
+    plotWidth <- 2
+    savePath <- paste0(Project_Path, "Manuscript/Raw_Figures/Genotype.split_DotPlots/")
+  }
+  
+  # Save the plot
+  ggplot2::ggsave(
+    filename = paste0(savePath, i, "_", GOI, ".svg"),
+    plot = customDotPlot + theme(legend.position = "none"),
+    height = 7,
+    width = plotWidth,
+    units = "cm",
+    dpi = 200,
+    scale = 1.4
+  )
+  
+  # Save the first plot with a legend
+  if (i == 1) {
+    ggplot2::ggsave(
+      filename = paste0(savePath, "0_withLegend.svg"),
+      plot = customDotPlot,
+      height = 7,
+      width = 4,
+      units = "cm",
+      dpi = 200,
+      scale = 1.4
+    )
+  }
+}
+
+for (i in 1:nrow(published)) {
+  # DotPlots for Fig1q
+  drawAllDotPlots(plot_data = combinedDotPlotData, i = i)
+  # DotPlots for Fig2m
+  drawAllDotPlots(plot_data = genotype.splitDotPlotData, i = i)
+}
+```
+## DEGs All
+```{r Differentially Expressed Genes}
+# find all Differentially Expressed Genes:
+Idents(ppsn) <- ppsn$wsnn_res.0.4
+if(DefaultAssay(ppsn) != "SCT"){DefaultAssay(ppsn) <- "SCT"}
+if(DefaultAssay(wt_ppsn) != "SCT"){DefaultAssay(wt_ppsn) <- "SCT"}
+if(DefaultAssay(ste_ppsn) != "SCT"){DefaultAssay(ste_ppsn) <- "SCT"}
+
+common_markers <- FindAllMarkers(object = ppsn, assay = "SCT", logfc.threshold = -Inf, min.pct = -Inf, return.thresh = 1.1) %>% mutate(DGE_test_sample = "Common")
+wt_markers <- FindAllMarkers(object = wt_ppsn, assay = "SCT", logfc.threshold = -Inf, min.pct = -Inf, return.thresh = 1.1) %>% mutate(DGE_test_sample = "Wild type")
+ste_markers <- FindAllMarkers(object = ste_ppsn, assay = "SCT", logfc.threshold = -Inf, min.pct = -Inf, return.thresh = 1.1) %>% mutate(DGE_test_sample = "∆stemin")
+
+all_DGE_Markers <- rbind(common_markers, wt_markers, ste_markers) %>% rownames_to_column(var = "feature")
+rm(common_markers, wt_markers, ste_markers)
+```
+
+## Cluster1DGEs
+```{r differentially expressed genes of cluster 1}
+# Cluster 1 Upregulated genes
+C1UGs <- all_DGE_Markers %>% filter(avg_log2FC > 1, p_val_adj < 0.01, cluster == 1) %>% .$gene %>% unique
+
+# Cluster 1 Downregulated genes
+C1DGs <- all_DGE_Markers %>% filter(avg_log2FC < -1, p_val_adj < 0.01, cluster == 1) %>% .$gene %>% unique
+
+length(C1UGs) # 1775
+length(C1DGs) # 1547
+
+if(DefaultAssay(ppsn) != "SCT"){DefaultAssay(ppsn) <- "SCT"}
+Idents(ppsn) <- "reprogramming_cells"
+Idents(ppsn) %>% table() # TRUE = 3585
+reprogramming_cells <- subset(ppsn, subset = `reprogramming_cells` == TRUE)
+
+#Differential gene expression for cluster 1 upregulated genes, among 3585 reprogramming cells, between genotype
+DGEC1UGs <-FindMarkers(
+  reprogramming_cells,
+  group.by = "genotype",
+  ident.1 = "Wild type",
+  ident.2 = "Δstemin",
+  logfc.threshold = 0,
+  min.pct = 0,
+  features = C1UGs
+  )
+
+# Wild type-specific Cluster 1 Upregulated Genes
+WSC1UG <- DGEC1UGs %>% filter(avg_log2FC > 1, p_val_adj < 0.01) %>% # wild type upregulated n = 54
+  arrange(desc(avg_log2FC)) %>% rownames_to_column(var = "feature")
+
+# ∆stemin-specific Cluster 1 Upregulated Genes
+SSC1UG <- DGEC1UGs %>% filter(avg_log2FC < -1, p_val_adj < 0.01) %>% # ∆stemin upregulated n = 108
+  arrange(desc(avg_log2FC)) %>% rownames_to_column(var = "feature")
+```
+
+## Venn diagram
+
+```{r Venn diagram}
+Idents(ppsn) <- "seurat_clusters"
+
+library(patchwork)
+
+# Cluster 1 differentially expressed genes:
+C1DEGs <- all_DGE_Markers %>% filter(p_val_adj < 0.01, abs(avg_log2FC) > 1, cluster == 1)
+# Calculate the number of cells in cluster 1 for each dataset
+combined_DEGs <- C1DEGs %>% filter(DGE_test_sample == "Common") %>% .$gene
+wt_DEGs       <- C1DEGs %>% filter(DGE_test_sample == "Wild type") %>% .$gene
+ste_DEGs      <- C1DEGs %>% filter(DGE_test_sample == "∆stemin") %>% .$gene
+
+# Create each plot with annotations
+combined_plot <- DimPlot(ppsn, reduction = "umap", cols = c("1" = "orange")) +
+  theme_void() +
+  theme(legend.position = "none") +
+  ggtitle("Combined\n(wild type + ∆stemin)") +
+  annotate("text", x = 0, y = -6, label = paste(length(combined_DEGs), " genes"), size = 3, hjust = 0.5)
+
+wt_plot <- DimPlot(wt_ppsn, reduction = "umap", cols = c("1" = "orange")) +
+  theme_void() +
+  theme(legend.position = "none") +
+  ggtitle("Wild type") +
+  annotate("text", x = 0, y = -6, label = paste(length(wt_DEGs), " genes"), size = 3, hjust = 0.5)
+
+ste_plot <- DimPlot(ste_ppsn, reduction = "umap", cols = c("1" = "orange")) +
+  theme_void() +
+  theme(legend.position = "none") +
+  ggtitle("∆stemin") +
+  annotate("text", x = 0, y = -6, label = paste(length(ste_DEGs), " genes"), size = 3, hjust = 0.5)
+
+# Combine all plots into a single visualization
+(combined_plot | wt_plot | ste_plot) %>% ggplot2::ggsave(plot = ., filename = paste0(Project_Path, "Manuscript/Raw_Figures/Fig3a_highlight_Reprogramming.svg"),units = "cm", height = 7, width = 21)
+
+
+
+# Venn diagram of genes differtially expressed in the reprogramming cluster (cluster1)
+vennInputList <- list(Combined = combined_DEGs,
+                      stemin = ste_DEGs,
+                      `Wild type`= wt_DEGs
+                      )
+
+Venn <- eulerr::euler(vennInputList)
+plot(Venn, quantities = TRUE) %>% ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/Fig3b_Clust1DEGs_Venn.svg"))
+rm(list = c('vennInputList', 'Venn'))
+```
+## Volcano Plot
+```{r volcano plot}
+# Test if genes differentially expressed in cluster 1 (up or down) can further be distingished by differential expression by genotype
+C1DEGs$gene %>% unique() # Cluster 1 Differentially Expressed Genes
+DGEC1DEGs <-FindMarkers( # Differential Gene Expression of Cluster 1 Differentially Expressed Genes
+  reprogramming_cells,
+  group.by = "genotype",
+  ident.1 = "Wild type",
+  ident.2 = "Δstemin",
+  logfc.threshold = 0,
+  min.pct = 0,
+  features = C1DEGs$gene %>% unique()
+  )
+
+DGEC1DEGs <- DGEC1DEGs %>%
+  mutate(sample_DGEs = "", Gene_IDv6 = row.names(.)) %>%
+  mutate(sample_DGEs =  ifelse(avg_log2FC > 1, yes = "wild type", ifelse(avg_log2FC < -1, yes = "∆stemin", "")) )%>% mutate(sample_DGEs = ifelse(p_val_adj > 0.01, "", sample_DGEs)) %>% left_join(published, "Gene_IDv6") %>%
+  mutate(Gene_Name = ifelse(p_val_adj > 0.01, "", Gene_Name))
+(
+  ggplot(DGEC1DEGs, aes(y = -log(p_val_adj), 
+                                                 x = avg_log2FC, 
+                                                 colour = sample_DGEs, 
+                                                 label = Gene_Name)) + 
+    geom_point(alpha = 0.3) +
+    xlab(bquote("Average log"[2]*"(fold change)")) + 
+    ylab(bquote("-log(adjusted "*italic("p")*"-value)")) +
+    geom_text_repel(aes(label=ifelse(abs(avg_log2FC)>1,as.character(Gene_Name),'')),
+                  nudge_x = 0.1, nudge_y = 15,
+                  hjust=0,vjust=0, size = 2.8, color = "black") +
+    scale_color_manual(values = c("grey","#00AFBB","#bb0c00"))
+  ) %>% 
+  ggplot2::ggsave(., filename = paste0(Project_Path,"Manuscript/Raw_Figures/Fig3b_Volcano.svg"), 
+                        height = 14, width = 18, units = "cm")
+```
+
+
+
+
