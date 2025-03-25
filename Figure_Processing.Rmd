@@ -9,14 +9,15 @@ output: html_notebook
 # Install and load required packages
 # pacman::p_load() helps manage package installation and loading
 
-pacman::p_load(tidyverse, ggpubr, viridis, ggrepel)
+pacman::p_load(tidyverse, ggpubr, viridis, ggrepel, multcompView)
+devtools::load_all("/Users/Ruan/Google Drive/My Drive/NIBB/Reprogramming P. patens Multiome/Version6/BSgenome.Ppatens.v6")
 ```
 
 
 ## Load Preprocessed Data
 ```{r load data}
 # Increase memory size and load preprocessed Seurat object for analysis
-mem.maxVSize(100000)
+mem.maxVSize(1000000)
 Project_Path <- "/Users/Ruan/Google Drive/My Drive/NIBB/Reprogramming P. patens Multiome/"
 load(paste0(Project_Path, "PreprocessedSeurat_v6_240910.RData"))
 ```
@@ -399,6 +400,7 @@ DGEC1UGs <-FindMarkers(
 # Wild type-specific Cluster 1 Upregulated Genes
 WSC1UG <- DGEC1UGs %>% filter(avg_log2FC > 1, p_val_adj < 0.01) %>% # wild type upregulated n = 54
   arrange(desc(avg_log2FC)) %>% rownames_to_column(var = "feature")
+WSC1UGs <- WSC1UG$feature
 
 # ∆stemin-specific Cluster 1 Upregulated Genes
 SSC1UG <- DGEC1UGs %>% filter(avg_log2FC < -1, p_val_adj < 0.01) %>% # ∆stemin upregulated n = 108
@@ -487,7 +489,1144 @@ DGEC1DEGs <- DGEC1DEGs %>%
   ggplot2::ggsave(., filename = paste0(Project_Path,"Manuscript/Raw_Figures/Fig3b_Volcano.svg"), 
                         height = 14, width = 18, units = "cm")
 ```
+## DEGs Heatmap
+```{r}
+library("DoMultiBarHeatmap")
+
+ppsn[['activity']] <- CreateAssayObject(counts = geneActivity[!duplicated(rownames(geneActivity)),])
+
+clust_top10<- all_DGE_Markers %>% filter(p_val_adj < 0.01, DGE_test_sample %in% "Common", pct.2 > 0.1) %>% group_by(cluster) %>% top_n(n = 20, wt = avg_log2FC) %>% .$gene
+
+ppsn@meta.data <- ppsn@meta.data %>% mutate(seurat_clusters_2digit = sprintf("%02d", as.integer(as.character(wsnn_res.0.4))))
+
+DefaultAssay(ppsn) <- "SCT" 
+clusts0_5 <- subset(ppsn, subset = wsnn_res.0.4 %in% 0:5)
+clusts6_10 <- subset(ppsn, subset = wsnn_res.0.4 %in% 6:10)
+
+DefaultAssay(clusts0_5) <- "SCT"
+DefaultAssay(clusts6_10) <- "SCT"
+clusts0_5 <- ScaleData(clusts0_5, features = clust_top10)
+clusts6_10 <- ScaleData(clusts6_10, features = clust_top10)
+
+p1.1 <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts0_5, 
+                                           assay = 'SCT', 
+                                           features = clust_top10, 
+                                           group.by = "seurat_clusters_2digit", 
+                                           additional.group.by = 'orig.ident') +
+  scale_y_discrete( position = "left", 
+                    labels = as.expression(
+                      sapply(seq_along(clust_top10),
+                              function(i){
+                                bquote(italic(.(str_replace(clust_top10[i], "-","_"))))
+                              }))) +
+  scale_fill_viridis() +theme(legend.position = "none", axis.text.y = element_text(size = 5))
+
+p1.2 <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts6_10, 
+                                           assay = 'SCT', 
+                                           features = clust_top10, 
+                                           group.by = "seurat_clusters_2digit", 
+                                           additional.group.by = 'genotype') +
+  scale_y_discrete( position = "left", 
+                    labels = as.expression(
+                      sapply(seq_along(clust_top10),
+                              function(i){
+                                bquote(italic(.(str_replace(clust_top10[i], "-","_"))))
+                              }))) +
+  scale_fill_viridis() +theme(axis.text.y = element_blank())
+p1.1+p1.2
+
+DefaultAssay(clusts0_5) <- "activity"
+DefaultAssay(clusts6_10) <- "activity"
+
+clusts0_5 <- ScaleData(clusts0_5, features = clust_top10)
+clusts6_10 <- ScaleData(clusts6_10, features = clust_top10)
+
+p2.1 <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts0_5,
+                  assay = 'activity',
+                  features = clust_top10,
+                  group.by = "seurat_clusters_2digit",
+                  additional.group.by = 'genotype') +
+  scale_fill_viridis() +theme(legend.position = "none", axis.text.y = element_text(size = 5))
+
+p2.2 <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts6_10,
+                  assay = 'activity',
+                  features = clust_top10,
+                  group.by = "seurat_clusters_2digit",
+                  additional.group.by = 'genotype') +
+  scale_fill_viridis() + theme(axis.text.y=element_blank())
 
 
 
+LeftFrame <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts0_5, features = clust_top10, cells = colnames(ppsn)[1:2]) + theme(axis.text.y = element_text(size = 4))
 
+RightFrame <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts0_5, features = clust_top10, cells = colnames(ppsn)[1:2]) + theme(axis.text.y = element_text(size = 4)) +
+  scale_fill_viridis()
+
+
+
+TopFrame1 <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts0_5, 
+                                    features = clust_top10[1],
+                                    group.by = 'seurat_clusters_2digit',
+                                    additional.group.by = 'genotype',) +theme(legend.position = "none")
+TopFrame2 <- DoMultiBarHeatmap::DoMultiBarHeatmap(clusts6_10, 
+                                    features = clust_top10[1],
+                                    group.by = 'seurat_clusters_2digit',
+                                    additional.group.by = 'genotype',) +theme(legend.position = "none")
+                                    angle = 0, 
+                                    raster = T, 
+                                    #group.colors = rep(hue_pal()(11), each= 2),
+                                    vjust = 0.2) + theme(axis.text.y = element_text(size = 4))
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/TopFrame1.svg"),TopFrame1, height = 4, width = 7, units = "cm")
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/TopFrame2.svg"),TopFrame2, height = 4, width = 7, units = "cm")
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/LeftFrame.svg"),LeftFrame, height = 15, width = 4, units = "cm")
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/RightFrame.svg"),RightFrame, height = 15, width = 4, units = "cm")
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/Plot1.1.jpg"), plot = p1.1, height = 7, width = 7, dpi = 500)
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/Plot1.2.jpg"), plot = p1.2, height = 7, width = 7, dpi = 500)
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/Plot2.1.jpg"), plot = p2.1, height = 7, width = 7, dpi = 500)
+
+ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/ActivityHeatMap/Plot2.2.jpg"), plot = p2.2, height = 7, width = 7, dpi = 500)
+
+```
+
+## Correlation Analysis
+
+```{r Generate and Export Gene Activity Assay}
+
+library(ggpointdensity)
+
+# Define global settings
+ppsn$all <- "all"
+Idents(ppsn) <- "all"
+DefaultAssay(ppsn) <- "peaks"
+
+# Initialize an empty dataframe to store R values
+correlation_table <- data.frame(
+  cluster = character(),  # Store the cluster name or ID
+  all_genes_aggr = numeric(),
+  goi_genes_aggr = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Function to calculate statistics, plot and save
+  calculate_and_save_plot <- function(data, x_col, y_col, x_label, y_label, limits_x, limits_y, filename) {
+    # Perform Spearman's correlation test
+  spearman_test <- cor.test(data[[x_col]], data[[y_col]], method = "spearman")
+  spearman_cor <- spearman_test$estimate   # Spearman correlation coefficient
+  p_value <- spearman_test$p.value         # Associated p-value
+  n <- nrow(data)                          # Number of genes considered
+(
+ggplot(data, aes(x = log(data[[x_col]]), y = log(data[[y_col]]))) +
+  geom_pointdensity(alpha = 0.1) +
+  scale_color_viridis() +
+  geom_smooth(method = "lm") +
+  annotate(
+    "text",
+    x = limits_x[1]+((limits_x[2]-limits_x[1])*0.02),  # Slight offset from the left
+    y = limits_y[2]-((limits_y[2]-limits_y[1])*0.02),  # Slight offset from the top
+    label = sprintf("R = %.2f\np = %.2e\nn = %d", spearman_cor, p_value, n),
+    hjust = 0, vjust = 1, size = 4  # Align text to top-left
+  ) +
+  labs(x = x_label, y = y_label) +
+  scale_x_continuous(limits = limits_x) +
+  scale_y_continuous(limits = limits_y)
+) %>% ggplot2::ggsave(plot = ., filename = filename, units = "cm", height = 15, width = 15)
+  }
+
+
+# Iterate over clusters
+for (i in levels(ppsn$wsnn_res.0.4)) {
+  # Subset data by cluster
+  subset <- subset(ppsn, subset = wsnn_res.0.4 %in% i)
+
+  if(!file.exists(paste0(Project_Path,"Manuscript/Raw_Figures/ActivitySubsets/subset", i, ".RDS"))){
+  # Calculate Gene Activity
+  subsetGeneActivity <- GeneActivity(
+    subset,
+    features = rownames(ppsn@assays$SCT),
+    extend.upstream = 2000,
+    extend.downstream = 2000,
+    process_n = 4000
+  )
+  saveRDS(subsetGeneActivity, file = paste0(Project_Path,"Manuscript/Raw_Figures/ActivitySubsets/subset", i, ".RDS"))
+  }
+  
+  subsetGeneActivity <- readRDS(file = paste0(Project_Path,"Manuscript/Raw_Figures/ActivitySubsets/subset", i, ".RDS"))
+  rownames(subsetGeneActivity) <- rownames(ppsn@assays$SCT)
+  
+  # Create new assay for Gene Activity
+  subset[["activity"]] <- CreateAssayObject(counts = subsetGeneActivity)
+
+  cor_data_subset <- data.frame(
+    aggregate_SCT = AggregateExpression(subset, features = rownames(subset@assays$activity), assays = "SCT"),
+    aggregate_gene.score = AggregateExpression(subset, assays = "activity")
+  ) %>% rename(
+    aggregate_SCT = all,
+    aggregate_gene.score = all.1
+  )
+
+  # Save plots and calculate Spearman correlations for all genes
+  all_genes_aggr <- cor(cor_data_subset$aggregate_SCT, cor_data_subset$aggregate_gene.score, method = "spearman")
+
+  calculate_and_save_plot(
+    data = cor_data_subset, 
+    x_col = "aggregate_SCT", 
+    y_col = "aggregate_gene.score",
+    x_label = "log(Aggregate Expression)", 
+    y_label = "log(Aggregate Accessibility)",
+    limits_x = c(0, 10), limits_y = c(0, 20), 
+    filename = paste0(Project_Path,"Manuscript/Raw_Figures/per_cluster_activity_for_all_genes/subset_aggregate_", i, ".svg")
+  )
+
+  # Filter for genes of interest (GOIs)
+  clusterGOIs <- merged_all_DGE_Markers %>%
+    filter(
+      cluster %in% i,
+      avg_log2FC > 1,
+      p_val_adj < 0.01,
+      gene %in% rownames(subset@assays$activity)
+    ) %>%
+    pull(gene) %>%
+    unique()
+
+  cor_data_subset_goi <- cor_data_subset %>%
+    filter(rownames(.) %in% clusterGOIs)
+
+  # Save plots and calculate Spearman correlations for GOI genes
+    goi_genes_aggr <- cor(cor_data_subset_goi$aggregate_SCT, cor_data_subset_goi$aggregate_gene.score, method = "spearman")
+
+    calculate_and_save_plot(
+      data = cor_data_subset_goi, 
+      x_col = "aggregate_SCT", 
+      y_col = "aggregate_gene.score",
+      x_label = "log(Aggregate Expression)", 
+      y_label = "log(Aggregate Accessibility)",
+      limits_x = c(0, 10), limits_y = c(0, 20), 
+      filename = paste0(Project_Path,"Manuscript/Raw_Figures/per_cluster_activity_for_goi_genes/subset_aggregate_", i, ".svg")
+    )
+
+  # Append results to the correlation table
+  correlation_table <- rbind(
+    correlation_table,
+    data.frame(
+      cluster = i,
+      all_genes_aggr = all_genes_aggr,
+      goi_genes_aggr = goi_genes_aggr,
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+# Save the correlation table to a file (optional)
+# write.csv(correlation_table, file = paste0(Project_Path,"Manuscript/Raw_Figures/correlation_table.csv"), row.names = FALSE)
+
+# Reshape data into long format for easier plotting
+correlation_long <- correlation_table %>%
+  pivot_longer(
+    cols = -cluster, # All columns except cluster
+    names_to = "correlation_type", # New column for correlation types
+    values_to = "R_value" # New column for R values
+  )
+
+# Create a bar graph
+(
+  ggplot(correlation_table, aes(x = goi_genes_aggr, y = factor(cluster, levels = rev(unique(cluster))))) + # Reverse cluster order
+  geom_bar(stat = "identity", position = "dodge") + # Dodged bars for each type
+  scale_y_discrete(name = "Cluster") + # Label for y-axis
+  scale_x_continuous(name = "Spearman's Correlation Score (R)") + # Label for x-axis
+  theme_minimal() +
+  theme(
+    legend.position = "top", # Move legend to top
+    axis.text.y = element_text(size = 10) # Increase y-axis text size for readability
+  )
+  ) %>% ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/per_cluster_activity_for_goi_genes/SpearmanCorrelations.svg"))
+                        
+(
+  ggplot(correlation_table, aes(x = all_genes_aggr, y = factor(cluster, levels = rev(unique(cluster))))) + # Reverse cluster order
+  geom_bar(stat = "identity", position = "dodge") + # Dodged bars for each type
+  scale_y_discrete(name = "Cluster") + # Label for y-axis
+  scale_x_continuous(name = "Spearman's Correlation Score (R)") + # Label for x-axis
+  theme_minimal() +
+  theme(
+    legend.position = "top", # Move legend to top
+    axis.text.y = element_text(size = 10) # Increase y-axis text size for readability
+  )
+  ) %>% ggplot2::ggsave(filename = paste0(Project_Path,"Manuscript/Raw_Figures/per_cluster_activity_for_all_genes/SpearmanCorrelations.svg"))
+
+```
+
+## Clusterwise Activity
+```{r}
+# Retrieve the row names and column names of the gene activity matrix
+rownames(geneActivity)  # List of genes
+colnames(geneActivity)  # List of cell IDs
+
+# Sort the clustering assignments (clusters for each cell)
+# ppsn$wsnn_res.0.4 is a vector of cluster assignments for cells
+# Clustering results are sorted to maintain consistent cluster indexing
+clustering <- ppsn$seurat_clusters %>% sort()
+
+# Initialize matrices to store the cluster-wise sums of gene activity
+# and the counts of cells in each cluster:
+# cluster_sums:
+#   Rows represent genes
+#   Columns represent clusters
+#   Values are the cumulative gene activity sums for each gene across cells in the same cluster
+cluster_sums <- matrix(0, 
+                       nrow = nrow(geneActivity), 
+                       ncol = length(unique(clustering)))
+rownames(cluster_sums) <- rownames(geneActivity)  # Assign gene names as row names
+colnames(cluster_sums) <- unique(clustering)      # Assign cluster numbers as column names
+
+# cluster_counts:
+#   A named vector where each name is a cluster ID
+#   Values represent the number of cells in each cluster
+cluster_counts <- table(clustering)  # Count the number of cells per cluster
+
+# Iterate through the columns of geneActivity (each column corresponds to a cell)
+# For each cell, determine the cluster it belongs to and update the sums for that cluster
+for (i in seq_len(ncol(geneActivity))) {
+  # Get the cluster ID of the current cell by matching the cell ID with clustering information
+  cluster <- as.character(clustering[colnames(geneActivity)[i]])
+  
+  # Add the gene activity values for the current cell to the corresponding cluster column
+  # This aggregates (sums) gene activity across all cells in the same cluster
+  cluster_sums[,cluster] <- cluster_sums[,cluster] + geneActivity[,i]
+}
+
+# Calculate the average gene activity for each cluster
+average_activity <- cluster_sums
+for (cluster in levels(clustering)) {
+  average_activity[, cluster] <- cluster_sums[, cluster] / cluster_counts[cluster]
+}
+average_activity_DF <- as.data.frame(average_activity) %>% rownames_to_column("gene_ID") %>% pivot_longer(2:ncol(.),names_to = "cluster") %>% mutate(cluster = factor(cluster,levels = 0:10))
+saveRDS(average_activity_DF, file = paste0(Project_Path, "R Analysis/geneActivity/GA_matrixMethod.RDS"))
+average_activity_DF <- readRDS(file = paste0(Project_Path, "R Analysis/geneActivity/GA_matrixMethod.RDS"))
+
+anova_result <- aov(value ~ cluster, data = average_activity_DF)
+posthoc_score <- TukeyHSD(anova_result)
+tukey_cld_letters <- multcompLetters4(anova_result, posthoc_score) %>% .$cluster %>% .$Letters %>% data.frame(tukey_cld_letters = .) %>% rownames_to_column("cluster")
+
+# Create the box plot with letters
+(
+  ggplot(average_activity_DF, aes(
+    x = cluster, y = log(value), fill = cluster
+  )) +
+    geom_boxplot() +
+    geom_text(
+      data = tukey_cld_letters,
+      aes(
+        x = cluster,
+        y = max(log(average_activity_DF$value)) + 0.1,
+        label = tukey_cld_letters
+      ),
+      vjust = 0
+    ) +
+    ylab("log of mean gene activity") +
+    theme(legend.position = "none") +
+    labs(title = "Mean Gene Activity per Cluster with Tukey HSD Letters")
+) %>% ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/Fig4e_GeneActivityBox.svg"), 
+                      units = "cm", height = 10, width = 10)
+
+# Convert the result to a sparse matrix
+average_activity_sparse <- as(average_activity, "dgCMatrix")
+
+# Display the average expression sparse matrix
+as.data.frame(t(average_activity_sparse))
+
+```
+
+##CoveragePlots
+```{r}
+ppsn@meta.data$reprogramming_by_genotype = paste0(ifelse(ppsn$reprogramming_cells, "Reprogrammming", "Non-reprogramming")," ", ppsn$genotype)
+
+DefaultAssay(ppsn) <- "peaks"
+published %>% filter(Gene_Name %in% c("CYCD;1", "EXPB5"))
+FeaturePlot(ppsn, reduction = "umap", order = T, pt.size = 1, split.by = "genotype",features = peaksInPromoter(gene_name = c("CYCD;1", "EXPB5")))&
+    scale_color_gradientn(colors = viridis(n = 10, direction = -1), limits = c(0, 2.2))
+
+   ( CoveragePlot(
+  object = ppsn,
+  group.by = 'reprogramming_by_genotype',
+  region = "Pp6c15-8720",
+  feature = "Pp6c15-8720",
+  extend.upstream = 2500, extend.downstream = 2500) &
+    scale_fill_manual(values = c("cyan2", "cyan4","coral2", "coral4"))) %>% ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/Fig5e_CoveragePlot/CYCD1_Coverage.svg"), 
+                      units = "cm", height = 14, width = 7)
+(
+    CoveragePlot(
+  object = ppsn,
+  group.by = 'reprogramming_by_genotype',
+  region = "Pp6c17-6410",
+  feature = "Pp6c17-6410",
+  extend.upstream = 2500, extend.downstream = 2500) &
+    scale_fill_manual(values = c("cyan2", "cyan4","coral2", "coral4")))) %>% ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Raw_Figures/Fig5e_CoveragePlot/EXPB5_Coverage.svg"), 
+                      units = "cm", height = 14, width = 7)    
+DefaultAssay(ppsn) <- "SCT"
+FeaturePlot(ppsn, reduction = "umap", order = T, pt.size = 1, split.by = "genotype", feature = "Pp6c15-8720")&
+    scale_color_gradientn(colors = viridis(n = 10, direction = -1), limits = c(0, 2.2))
+FeaturePlot(ppsn, reduction = "umap", order = T, pt.size = 1, split.by = "genotype", features = "Pp6c17-6410")&
+    scale_color_gradientn(colors = viridis(n = 10, direction = -1), limits = c(0, 2.2))
+```
+## Export BigWigs
+```{r}
+# This script contains functions copied from the Signac GitHub repository.
+# Source: https://github.com/stuart-lab/signac/pull/1887
+# Functions: ExportGroupBW, CreateBWGroup, %bcin%
+# Contributors: Baboon61, timoast, lldelisle
+# Accessed on: [2024/12/06]
+
+
+library(future)
+library(pbapply)
+
+ExportGroupBW <- function(
+    object,
+    assay = NULL,
+    group.by = NULL,
+    idents = NULL,
+    normMethod = "RC",
+    tileSize = 100,
+    minCells = 5,
+    cutoff = NULL,
+    chromosome = NULL,
+    outdir = NULL,
+    verbose = TRUE
+) {
+  message("Start ExportGroupBW function")
+  # Check if temporary directory exists
+  if (!dir.exists(outdir)) {
+    message("Creating output directory: ", outdir)
+    dir.create(outdir)
+  }
+  if (!requireNamespace("rtracklayer", quietly = TRUE)) { 
+    message("Please install rtracklayer. http://www.bioconductor.org/packages/rtracklayer/") 
+    return(NULL) 
+  }
+  
+  assay <- SetIfNull(x = assay, y = DefaultAssay(object = object))
+  DefaultAssay(object = object) <- assay
+  group.by <- SetIfNull(x = group.by, y = 'ident')
+  Idents(object = object) <- group.by
+  idents <- SetIfNull(x = idents, y = levels(x = object))
+  
+  GroupsNames <- names(x = table(object[[group.by]])[table(object[[group.by]]) > minCells])
+  print(GroupsNames)
+  GroupsNames <- GroupsNames[GroupsNames %in% idents]
+    message("Identified groups: ", paste(GroupsNames, collapse = ", "))
+  
+  # Check if output files already exist
+  lapply(X = GroupsNames, FUN = function(x) {
+    fn <- paste0(outdir, .Platform$file.sep, x, ".bed")
+    if (file.exists(fn)) {
+      message(sprintf("The group \"%s\" is already present in the destination folder and will be overwritten!", x))
+      file.remove(fn)
+    }
+  }) 
+  
+  # Splitting fragments file for each idents in group.by
+  SplitFragments(
+    object = object,
+    assay = assay,
+    group.by = group.by,
+    idents = idents,
+    outdir = outdir,
+    file.suffix = "",
+    append = TRUE,
+    buffer_length = 256L,
+    verbose = verbose
+  )
+  
+  # Column to normalize by
+  if (!is.null(x = normMethod)) {
+    if (tolower(x = normMethod) %in% c('rc', 'ncells', 'none')) {
+      normBy <- normMethod
+    } else {
+      normBy <- object[[normMethod, drop = FALSE]]
+    }
+  }
+  message("lets print the `chromosomes` object:")
+  print(chromosome)
+  print("")
+  # Get chromosome information
+  message("Up to chromosome information step")
+  if (!is.null(x = chromosome)) {
+    seqinfo(object) <- chromosome
+  }
+  availableChr <- seqnames(x = object)
+  chromLengths <- seqlengths(object)
+  chromSizes <- GRanges(
+    seqnames = availableChr,
+    ranges = IRanges(
+      start = rep(1, length(x = availableChr)),
+      end = as.numeric(x = chromLengths)
+    )
+  )
+  
+  if (verbose) {
+    message("Creating tiles")
+  }
+  # Create tiles for each chromosome, from GenomicRanges
+  tiles <- unlist(
+    x = slidingWindows(x = chromSizes, width = tileSize, step = tileSize)
+  )
+  
+  if (verbose) {
+    message("Creating bigwig files at ", outdir)
+  }
+  
+  # Run the creation of bigwig for each cell groups
+  if (nbrOfWorkers() > 1) { 
+    mylapply <- future_lapply 
+  } else { 
+    mylapply <- ifelse(test = verbose, yes = pblapply, no = lapply) 
+  }
+  print("Up to before covFiles")
+  
+  covFiles <- mylapply(
+    GroupsNames,
+    FUN = CreateBWGroup,
+    availableChr,
+    chromLengths,
+    tiles,
+    normBy,
+    tileSize,
+    normMethod,
+    cutoff,
+    outdir
+  )
+  
+  message("Completed ExportGroupBW function")
+  return(covFiles)
+}
+
+CreateBWGroup <- function(
+    groupNamei,
+    availableChr,
+    chromLengths,
+    tiles,
+    normBy,
+    tileSize,
+    normMethod,
+    cutoff,
+    outdir
+) {
+  message("Start CreateBWGroup function for group: ", groupNamei)
+  
+  if (!requireNamespace("rtracklayer", quietly = TRUE)) { 
+    message("Please install rtracklayer. http://www.bioconductor.org/packages/rtracklayer/") 
+    return(NULL) 
+  }
+  
+  normMethod <- tolower(x = normMethod)
+  
+  # Read the fragments file associated with the group
+  print(outdir)
+  print(groupNamei)
+  print(paste0(outdir, .Platform$file.sep, groupNamei, ".bed"))
+  
+  fragi <- rtracklayer::import(
+    paste0(outdir, .Platform$file.sep, str_replace(groupNamei," ", "_"), ".bed"), format = "bed"
+  )
+  cellGroupi <- unique(x = fragi$name)
+  
+  # Open the writing bigwig file
+  covFile <- file.path(
+    outdir,
+    paste0(str_replace(groupNamei," ","_"), "-TileSize-", tileSize, "-normMethod-", normMethod, ".bw")
+  )
+  
+  message("Preparing coverage list for available chromosomes")
+  print(availableChr)
+  covList <- lapply(X = seq_along(availableChr), FUN = function(k) {
+    message("Processing chromosome: ", availableChr[k])
+    
+    fragik <- fragi[seqnames(fragi) == availableChr[k],]
+    tilesk <- tiles[BiocGenerics::which(S4Vectors::match(seqnames(tiles), availableChr[k], nomatch = 0) > 0)]
+    
+    if (length(x = fragik) == 0) {
+      message("No fragments found for chromosome: ", availableChr[k])
+      tilesk$reads <- 0
+    } else {
+      message("Fragments found for chromosome: ", availableChr[k])
+      nTiles <- chromLengths[availableChr[k]] / tileSize
+      
+      # Add one tile if there are extra bases
+      if (nTiles %% 1 != 0) {
+        nTiles <- trunc(x = nTiles) + 1
+      }
+      
+      matchID <- S4Vectors::match(mcols(fragik)$name, cellGroupi)
+      
+      mat <- Matrix::sparseMatrix(
+        i = c(trunc(x = start(x = fragik) / tileSize),
+              trunc(x = end(x = fragik) / tileSize)) + 1,
+        j = as.vector(x = c(matchID, matchID)),
+        x = rep(1, 2 * length(x = fragik)),
+        dims = c(nTiles, length(x = cellGroupi))
+      )
+      
+      # Max count for cells in a tile is set to cutoff
+      if (!is.null(x = cutoff)) {
+        mat@x[mat@x > cutoff] <- cutoff
+      }
+      
+      # Sum the cells
+      mat <- rowSums(x = mat)
+      tilesk$reads <- mat
+      
+      # Normalization
+      if (!is.null(x = normMethod)) {
+        if (normMethod == "rc") {
+          tilesk$reads <- tilesk$reads * 10^4 / length(fragi$name)
+        } else if (normMethod == "ncells") {
+          tilesk$reads <- tilesk$reads / length(cellGroupi)
+        } else if (normMethod == "none") {
+        } else {
+          if (!is.null(x = normBy)) {
+            tilesk$reads <- tilesk$reads * 10^4 / sum(normBy[cellGroupi, 1])
+          }
+        }
+      }
+    }
+    
+    tilesk <- coverage(tilesk, weight = tilesk$reads)[[availableChr[k]]]
+    return(tilesk)
+  })
+  
+  names(covList) <- availableChr
+  covList <- as(object = covList, Class = "RleList")
+  rtracklayer::export.bw(object = covList, con = covFile)
+  
+  message("Completed CreateBWGroup function for group: ", groupNamei)
+  return(covFile)
+}
+
+SetIfNull <- function(x, y) {
+  if (is.null(x = x)) {
+    return(y)
+  } else {
+    return(x)
+  }
+}
+
+# Create new Ident, RbG (Reprogramming by Genotype, separating reprogramming from non-reprogramming and protonema)
+ppsn$RbG <- str_replace_all(ppsn$seurat_clusters, "\\b(10|[02345689])\\b", "Other") # Reprogramming by genotype
+ppsn$RbG <- paste0("Cluster_",ppsn$RbG,"_", ppsn$genotype) # Reprogramming by genotype
+ppsn$RbG <- as.factor(ppsn$RbG)
+levels(ppsn$RbG) <- c(
+    "Cluster_1_Wild type",
+    "Cluster_1_Δstemin",
+    "Cluster_7_Wild type",
+    "Cluster_7_Δstemin",
+    "Cluster_Other_Wild type",
+    "Cluster_Other_Δstemin"
+)
+
+dir.create(paste0(Project_Path, "deeptools_Analysis/BigWigs"))
+
+ExportGroupBW(ppsn,
+    assay = 'peaks',
+    group.by = 'RbG',
+    idents = levels(ppsn@meta.data$RbG),
+    normMethod = "RC",
+    tileSize = 100,
+    minCells = 5,
+    cutoff = NULL,
+    chromosome = BSgenome.Ppatens.v6@seqinfo,
+    outdir = paste0(Project_Path, "deeptools_Analysis/BigWigs"),
+    verbose = TRUE
+)
+
+WSC1UGs # Wild type specific cluster 1 upregulated genes
+OC1UGs <- setdiff(C1UGs, WSC1UGs) # Other Cluster 1 upregulated genes
+
+dir.create(paste0(Project_Path, "deeptools_Analysis/GeneSets"))
+
+write_lines(file = paste0(Project_Path, "deeptools_Analysis/GeneSets/WSC1UGs.txt"),
+            WSC1UGs %>% str_replace_all("-","_"))
+write_lines(file = paste0(Project_Path, "deeptools_Analysis/GeneSets/OC1UGs.txt"),
+            OC1UGs %>% str_replace_all("-","_"))
+
+# The deeptools_Analysis directory and the PBS script file `deepTools_Analysis.pbs` is run to generate images.
+```
+## deepools to ggplot SVG
+```{r}
+# Initialize an empty dataframe to store AUC values and corresponding information
+auc_df <- data.frame(Plot = numeric(), Group = character(), AUC = numeric(), stringsAsFactors = FALSE)
+
+
+input_path <- paste0(Project_Path, "deeptools_Analysis/Figures/")
+old_svgs <- c("Cluster_1","Cluster_7","Cluster_Other")
+for(h in old_svgs){
+  svg_content <- readLines(paste0(input_path,h,"_profile.svg"), warn = FALSE)
+  #svg_content <- readLines("~/Google Drive/My Drive/NIBB/Reprogramming P. patens Multiome/deeptools/Old_SVGs/Other_Wild_type_vs_Δstemin_profile.svg")
+  svg_text <- paste(svg_content, collapse = " ")
+
+  # Extract y_min and y_max dynamically
+  y_ticks <- str_extract_all(svg_text, '<g id="ytick_[0-9]+">.*?y="([0-9.]+)".*?</g>')[[1]] 
+  y_coords <- as.numeric(sub('.*?y="([0-9.]+)".*', '\\1', y_ticks))
+  y_min <- max(y_coords, na.rm = TRUE) 
+  y_max <- min(y_coords, na.rm = TRUE)
+  
+  data_min <- 0
+  data_max <- 0.05
+
+# Corrected function to rescale y-coordinates considering SVG's y-axis orientation
+rescale_y <- function(y) {
+  return((y-y_min)*((data_max-data_min)/(y_max-y_min)))
+}
+
+# Extract all x-tick values
+x_ticks <- str_extract_all(svg_text, '<g id="xtick_[0-9]+">.*?x="([0-9.]+)".*?</g>')[[1]]
+x_coords <- as.numeric(sub('.*?x="([0-9.]+)".*', '\\1', x_ticks)) %>% .[1:4]
+x_axis <- data.frame(labels = c("-3000 kb", "TSS", "TES", "+3000 kb"),x_coords = x_coords)
+x_axis$x_coords <- x_axis$x_coords-x_axis$x_coords[1]
+
+  # Extract curve data using regular expressions
+  curve_data <- str_extract_all(svg_text, 'd="M[^"]* \" clip-path')[[1]]
+  curve_data <- sub('d="M', '', curve_data)
+  curve_data <- sub('\" clip-path', '', curve_data)
+  
+  group_names <- c("4_∆stemin, background", "1_Wild type, 54 GOIs", "2_Wild type, background", "3_∆stemin, 54 GOIs")
+
+  line_type <- c("solid", "dotted", "solid", "dotted")
+  
+  # Initialize an empty list to store data frames
+  curve_dfs <- list()
+  
+  # Loop over extracted curve data
+  for (i in 1:length(curve_data)) {
+    # Split the string into pairs of coordinates
+    coordinates <- unlist(strsplit(curve_data[[i]], "L"))
+    coordinates <- trimws(coordinates)
+    # Split each pair into X and Y values
+    coord_matrix <- do.call(rbind, lapply(coordinates, function(pair) { as.numeric(unlist(strsplit(pair, " "))) }))
+    # Rescale y-coordinates
+    coord_matrix[,2] <- rescale_y(coord_matrix[,2])
+    # Create a dataframe for each plot and add a column indicating plot number
+    curve_df <- data.frame(X = coord_matrix[,1], Y = coord_matrix[,2])
+    curve_df[,1] <- curve_df[,1] - curve_df[1,1]
+
+    # Calculate the AUC for the current plot
+    auc <- trapz(curve_df$X, curve_df$Y)
+    curve_df$curve_info <- paste0(group_names[i],"; AUC = ",round(auc, 2))
+    curve_df$line_type <- line_type[i]
+    
+    # Add AUC data to auc_df
+    auc_df <- rbind(auc_df, data.frame(Plot = h, Group = group_names[i], AUC = auc, stringsAsFactors = FALSE))
+    
+    curve_dfs[[i]] <- curve_df
+  }
+
+  # Combine all dataframes into one
+  final_df <- do.call(rbind, curve_dfs)
+  final_df$curve_info <- factor(final_df$curve_info, levels = sort(unique(final_df$curve_info), method = "radix"))
+
+  # Plot the curves
+  combined_curves <- ggplot(final_df) + 
+    geom_line(aes(x = X, y = Y, color = curve_info, alpha = 0.6, linetype = line_type)) +
+    scale_color_manual(values = c("red3","lightcoral","blue","deepskyblue1")) +
+    scale_y_continuous(limits = c(0, 0.05), breaks = seq(0, 0.05, by = 0.01)) +
+    scale_x_continuous(breaks = x_axis$x_coords, labels = x_axis$labels) +
+    theme_minimal() +
+    theme( panel.grid.major.y = element_line(color = "grey", linewidth = 0.5), 
+           panel.grid.minor.y = element_blank(), 
+           panel.grid.major.x = element_blank(), 
+           panel.grid.minor.x = element_blank(),
+           legend.position = "none",
+           plot.title = element_text(size=11,hjust = 0.5)) +
+  geom_vline(xintercept = x_axis$x_coords, linetype = "dashed", color = "grey") +
+    labs(title = paste0("Cluster ", h), x = element_blank(), y = "Average score")
+    
+  ggplot2::ggsave(plot = combined_curves, filename = paste0(Project_Path, "Manuscript/Raw_Figures/Fig5b_", h, "_profile.svg"), height = 4, width = 7, units = "cm")
+  #  ggplot2::ggsave(plot = combined_curves, filename = paste0("~/Google Drive/My Drive/NIBB/Reprogramming P. patens Multiome/deeptools/ggplottedSVGs/Other_profile.svg"), height = 4, width = 7, units = "cm")
+}
+
+```
+
+
+## TSS Activity
+```{r}
+annotation <- ppsn@assays$peaks@annotation
+TSSpeaksAssay <- ppsn@assays$peaks
+
+
+TSS_1kb <- GenomicRanges::promoters(annotation, upstream = 2000, downstream = 200)
+TSSpeaksAssay@annotation <- TSS_1kb
+ppsn@assays$TSSpeaksAssay <- TSSpeaksAssay
+DefaultAssay(ppsn) <- "TSSpeaksAssay"
+TSS_activity <- GeneActivity(ppsn, assay = "TSSpeaksAssay", process_n = 8000)
+ppsn@assays["TSSpeaksAssay"] <- CreateAssayObject(counts = TSS_activity,key = "TSS_")
+
+TSS_activity_data <- data.frame(cluster_genotype = ppsn$cluster_genotype_2, cluster = ppsn$wsnn_res.0.4, genotype = ppsn$genotype) %>% rownames_to_column("cell_id") %>% left_join(as.data.frame(t(TSS_activity[C1UGs,])) %>% rownames_to_column("cell_id"), by="cell_id") %>% pivot_longer(cols = 5:ncol(.), names_to = "feature",values_to = "TSS_activity") %>% mutate(geneset = ifelse(feature %in% setdiff(C1UGs, WSC1UGs), "background", "WSC1UGs")) %>% mutate(`genotype x geneset` = paste0(genotype, "_", geneset)) %>%
+  mutate(cluster = as.numeric(as.character(cluster))) %>%
+  mutate(cluster = if_else(cluster %in% c(1, 7), cluster, 0))
+
+TSS_activity_data %>% filter(feature %in% TSS_activity_data$feature[1]) %>% .$cluster %>% table()
+
+anova_results_list <- list()
+posthoc_results_list <- list()
+tukey_letters <- data.frame()
+
+for (i in c(0,1,7)) {
+  print(i)
+  cluster_data <- TSS_activity_data %>% filter(cluster == i)
+  print(cluster_data)
+  anova_result <- aov(TSS_activity ~ genotype * geneset, data = cluster_data)
+  print(anova_result)
+  anova_results_list[[as.character(i)]] <- summary(anova_result)
+  
+  posthoc_score <- TukeyHSD(anova_result)
+  tukey_cld <- multcompLetters4(anova_result, posthoc_score)
+  tukey_cld$`genotype:geneset`$Letters
+  tukey_letters <- rbind(tukey_letters,data.frame(genotype_geneset = names(tukey_cld$`genotype:geneset`$Letters),
+                              letter = as.vector(tukey_cld$`genotype:geneset`$Letters),
+                              cluster = i))
+  posthoc_df <- as.data.frame(posthoc_score$`genotype:geneset`) %>%
+    rownames_to_column("comparison") %>%
+    separate(comparison, into = c("interaction1", "interaction2"), sep = "-") %>%
+    mutate(cluster = i,
+           interaction1 = factor(interaction1),
+           interaction2 = factor(interaction2),
+           p_adj_label = ifelse(`p adj` < 0.001, "<0.001", sprintf("%.3f", `p adj`))) %>%
+    filter(!(interaction1 == "Δstemin:WSC1UGs" & interaction2 == "Wild type:background")) %>%
+    filter(!(interaction1 == "Wild type:WSC1UGs" & interaction2 == "Δstemin:background"))
+  
+  posthoc_results_list[[as.character(i)]] <- posthoc_df
+}
+tukey_letters <-  mutate(tukey_letters, cluster = as.numeric(cluster))
+
+posthoc_combined_df <- bind_rows(posthoc_results_list)
+summarised_TSS_activity_data <- TSS_activity_data %>%
+  group_by(cluster, genotype, geneset) %>% 
+  summarise( Mean = mean(TSS_activity), 
+             SEM = sd(TSS_activity) / sqrt(n()), 
+             Nb = n() ) %>%
+  mutate(genotype_geneset = paste0(genotype,":",geneset)) %>%
+  left_join(tukey_letters, by = c("genotype_geneset" = "genotype_geneset", "cluster" = "cluster"))
+
+
+y.spread = 0.4
+max_means <- summarised_TSS_activity_data %>%
+  group_by(cluster) %>%
+  summarise(MaxMean = max(Mean)) %>%
+  rowwise() %>%
+  mutate(y.pos = list(c(MaxMean + (y.spread * 0), MaxMean + (y.spread * 1), MaxMean + (y.spread * 2), MaxMean + (y.spread * 3)))) %>%
+  unnest(cols = c(y.pos)) %>%
+  mutate(y.pos = y.pos+0.3)
+
+(
+ggplot(summarised_TSS_activity_data, aes(x = genotype_geneset, y = Mean, fill = genotype_geneset)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_fill_manual(values = c(
+    "Wild type:WSC1UGs" = "red3", 
+    "Δstemin:WSC1UGs" = "lightcoral", 
+    "Wild type:background" = "blue", 
+    "Δstemin:background" = "deepskyblue1"
+  )) +
+  geom_errorbar(aes(ymin = Mean - SEM, ymax = Mean + SEM), width = 0.2) +
+  geom_text(aes(label = letter, y = Mean + SEM + 0.2), size = 3, vjust = 0) +  # Add letters above bars
+  theme(axis.text.x = element_text(angle = 90)) +
+  facet_wrap(.~cluster, nrow = 1) +
+  theme(axis.text.x = element_blank(), axis.ticks = element_blank())
+) %>% ggplot2::ggsave(filename = paste0(Project_Path, "Manuscript/Figures_250116/TSS_activity.svg"),height = 9, width = 15, units = "cm")
+
+
+```
+
+
+```{r}
+## TSS Activity Analysis and Visualization
+
+# Extract the annotation from the 'peaks' assay in the Seurat object
+annotation <- ppsn@assays$peaks@annotation
+TSSpeaksAssay <- ppsn@assays$peaks  # Copy 'peaks' assay for modification
+
+# Define TSS (Transcription Start Sites) regions around gene promoters
+# Extending 2,000 bp upstream and 200 bp downstream
+TSS_1kb <- GenomicRanges::promoters(annotation, upstream = 2000, downstream = 200)
+TSSpeaksAssay@annotation <- TSS_1kb  # Update the annotation with TSS regions
+ppsn@assays$TSSpeaksAssay <- TSSpeaksAssay  # Assign the new assay to the Seurat object
+DefaultAssay(ppsn) <- "TSSpeaksAssay"  # Set the new TSS peaks assay as default for downstream analysis
+
+# Calculate TSS activity using the GeneActivity function
+TSS_activity <- GeneActivity(ppsn, assay = "TSSpeaksAssay", process_n = 8000)
+# Create a new assay object using the TSS activity matrix
+ppsn@assays["TSSpeaksAssay"] <- CreateAssayObject(counts = TSS_activity, key = "TSS_")
+
+# Merge TSS activity data with cluster and genotype information
+TSS_activity_data <- data.frame(
+  cluster_genotype = ppsn$cluster_genotype_2,  # Cluster-genotype combinations
+  cluster = ppsn$wsnn_res.0.4,                # Cluster assignments
+  genotype = ppsn$genotype                    # Genotype labels
+) %>%
+  rownames_to_column("cell_id") %>%  # Add cell IDs as a column
+  # Join the TSS activity data (only for selected genes) with cell metadata
+  left_join(as.data.frame(t(TSS_activity[C1UGs,])) %>% rownames_to_column("cell_id"), by = "cell_id") %>%
+  # Reshape data from wide to long format
+  pivot_longer(cols = 5:ncol(.), names_to = "feature", values_to = "TSS_activity") %>%
+  # Add a column to distinguish background genes from WSC1UGs
+  mutate(geneset = ifelse(feature %in% setdiff(C1UGs, WSC1UGs), "background", "WSC1UGs")) %>%
+  # Combine genotype and geneset information for downstream grouping
+  mutate(`genotype x geneset` = paste0(genotype, "_", geneset)) %>%
+  # Convert clusters to numeric format and classify non-cluster-1/7 as cluster 0
+  mutate(cluster = as.numeric(as.character(cluster))) %>%
+  mutate(cluster = if_else(cluster %in% c(1, 7), cluster, 0))
+
+# Debugging Step (Optional): Check cluster counts for the first feature
+TSS_activity_data %>% filter(feature %in% TSS_activity_data$feature[1]) %>% .$cluster %>% table()
+
+# Initialize lists and a dataframe for ANOVA results and Tukey post-hoc tests
+anova_results_list <- list()
+posthoc_results_list <- list()
+tukey_letters <- data.frame()
+
+# Loop through clusters of interest (0, 1, 7) to perform ANOVA and Tukey tests
+for (i in c(0, 1, 7)) {
+  print(i)  # Display the current cluster for debugging
+  
+  # Filter data for the current cluster
+  cluster_data <- TSS_activity_data %>% filter(cluster == i)
+  print(cluster_data)  # Debug: Check the filtered data
+  
+  # Perform a two-way ANOVA to test the effects of genotype and geneset on TSS activity
+  anova_result <- aov(TSS_activity ~ genotype * geneset, data = cluster_data)
+  print(anova_result)
+  anova_results_list[[as.character(i)]] <- summary(anova_result)  # Store ANOVA summary
+  
+  # Conduct post-hoc tests using Tukey's Honest Significant Difference (HSD)
+  posthoc_score <- TukeyHSD(anova_result)
+  tukey_cld <- multcompLetters4(anova_result, posthoc_score)  # Generate compact letter display (CLD)
+  tukey_cld$`genotype:geneset`$Letters  # Extract significance letters
+  
+  # Append the Tukey letters (significance) to a dataframe
+  tukey_letters <- rbind(
+    tukey_letters,
+    data.frame(
+      genotype_geneset = names(tukey_cld$`genotype:geneset`$Letters),
+      letter = as.vector(tukey_cld$`genotype:geneset`$Letters),
+      cluster = i
+    )
+  )
+  
+  # Create a data frame of post-hoc test results for additional inspection
+  posthoc_df <- as.data.frame(posthoc_score$`genotype:geneset`) %>%
+    rownames_to_column("comparison") %>%
+    separate(comparison, into = c("interaction1", "interaction2"), sep = "-") %>%
+    mutate(
+      cluster = i,
+      interaction1 = factor(interaction1),
+      interaction2 = factor(interaction2),
+      p_adj_label = ifelse(`p adj` < 0.001, "<0.001", sprintf("%.3f", `p adj`))
+    ) %>%
+    # Filter out irrelevant comparisons for clarity
+    filter(!(interaction1 == "Δstemin:WSC1UGs" & interaction2 == "Wild type:background")) %>%
+    filter(!(interaction1 == "Wild type:WSC1UGs" & interaction2 == "Δstemin:background"))
+  
+  posthoc_results_list[[as.character(i)]] <- posthoc_df  # Store post-hoc results
+}
+
+# Combine post-hoc results from all clusters into a single dataframe
+posthoc_combined_df <- bind_rows(posthoc_results_list)
+
+# Summarize TSS activity data by cluster, genotype, and geneset
+# Calculate mean, SEM (standard error of the mean), and count (n) for each group
+summarised_TSS_activity_data <- TSS_activity_data %>%
+  group_by(cluster, genotype, geneset) %>%
+  summarise(
+    Mean = mean(TSS_activity),                     # Calculate mean TSS activity
+    SEM = sd(TSS_activity) / sqrt(n()),            # Calculate standard error of the mean
+    Nb = n()                                       # Count the number of cells in each group
+  ) %>%
+  mutate(genotype_geneset = paste0(genotype, ":", geneset)) %>%  # Combine genotype and geneset into a single label
+  left_join(tukey_letters, by = c("genotype_geneset" = "genotype_geneset", "cluster" = "cluster")) %>%  # Merge Tukey's letters for significance 
+  mutate(genotype_geneset = factor(
+    genotype_geneset, 
+    levels = c("Wild type:WSC1UGs", 
+               "Δstemin:WSC1UGs", 
+               "Wild type:background", 
+               "Δstemin:background")),
+    cluster = factor(cluster, levels = c(1,7,0))
+  )
+
+
+# Determine y-axis positions for annotation (spread letters above bars)
+y.spread <- 0
+max_means <- summarised_TSS_activity_data %>%
+  group_by(cluster) %>%
+  summarise(MaxMean = max(Mean)) %>%                # Find the maximum mean TSS activity for each cluster
+  rowwise() %>%
+  mutate(y.pos = MaxMean) %>%
+  unnest(cols = c(y.pos)) %>%                       # Unnest the y-axis positions for plotting
+  mutate(y.pos = y.pos + 0.3)                       # Slightly offset the y-axis positions for better visibility
+
+# Create the bar plot
+(
+  ggplot(summarised_TSS_activity_data, aes(x = genotype_geneset, y = Mean, fill = genotype_geneset)) +
+    geom_bar(stat = "identity", show.legend = FALSE) +  # Create bars for mean values, disable legend
+    scale_fill_manual(
+      values = c(
+        "Wild type:WSC1UGs" = "red3",               # Assign colors to the desired order
+        "Δstemin:WSC1UGs" = "lightcoral",
+        "Wild type:background" = "blue",
+        "Δstemin:background" = "deepskyblue1"
+      )
+    ) +
+  geom_errorbar(aes(ymin = Mean - SEM, ymax = Mean + SEM), width = 0.2) +  # Add error bars
+  geom_text(aes(label = letter, y = Mean + SEM + 0.2), size = 3, vjust = 0) +  # Add Tukey letters
+  theme(
+    axis.text.x = element_text(angle = 90),  # Rotate x-axis labels for better readability
+    axis.ticks = element_blank()             # Remove x-axis ticks
+  ) +
+  facet_wrap(. ~ cluster, nrow = 1)) %>% # Create facets for clusters  
+  ggplot2::ggsave(
+  filename = paste0(Project_Path, "Manuscript/Raw_Figures/Fig5c_TSS_AUC.svg"), 
+  height = 9,
+  width = 9, 
+  units = "cm"
+)
+```
+## Motif Analysis
+```{r Export peak sequences to FASTA file}
+
+write.Peaks.To.Fasta <- function(fileName, peaks) {
+  tryCatch({
+    BSgenome.Ppatens.v6 <- BSgenome.Ppatens.v6::BSgenome.Ppatens.v6
+  }, error = function(e) {
+    stop("BSgenome.Ppatens.v6 not available. Please load the package using devtools::load_all(\"/Users/Ruan/Google Drive/My Drive/NIBB/Reprogramming P. patens Multiome/Version6/BSgenome.Ppatens.v6\")")
+  })
+  seq <- getSeq(BSgenome.Ppatens.v6::BSgenome.Ppatens.v6, peaks %>% StringToGRanges())
+  names(seq) <- peaks
+  writeXStringSet(x = seq, file = fileName)
+  return(seq)
+}
+```
+
+```{r Background Peaks}
+# 
+getBackgroundPeaks <- function(returnTotal = NULL, object = NULL, differentially_accessible = NULL){
+  if(is.null(returnTotal)){
+    returnTotal <- length(differentially_accessible)
+  }
+  if(DefaultAssay(object) != "peaks"){DefaultAssay(object) <- "peaks"}
+  open.peaks <- GetAssayData(object, assay = "peaks", slot = "counts")
+  peaks.use <- names(which(rowSums(open.peaks > 0) > 10))
+  peaks.use <- peaks.use[!peaks.use %in% differentially_accessible]
+  
+  # find a matched background set
+  background.peaks <- MatchRegionStats(
+  meta.feature = GetAssayData(object, assay = "peaks", slot = "meta.features")[peaks.use, ],
+  query.feature =GetAssayData(object, assay = "peaks", slot = "meta.features")[differentially_accessible,],
+  n = returnTotal
+)
+  return(background.peaks)
+}
+```
+
+```{r Export Differentially accessible promoter peaks}
+################################################################################
+#  Regions present in the promoters (TSS-2000bp:TSS) that exhibit higher peaks in the reprogramming cells, and that have links to the gene (gene expression and region accessibility correlate). This list precludes distant or CDS enhancers
+################################################################################
+# Add promoter metadata
+ppsn@assays$peaks@links$promoter <- promoters(ppsn@assays$peaks@links, upstream = 2000, downstream = 0) %>%
+  GRangesToString(., sep = c("-", "-"))
+
+# Cluster 1 and 7  Upregulated Genes : C1.7Ugs
+C1.7UGs <- all_DGE_Markers %>% filter(avg_log2FC > 1 & p_val_adj < 0.01 & cluster %in% c(1,7)) %>% .$gene %>% unique
+# Subset the GRanges to those with peaks linked to reprogramming cluster (1,7) upregulated genes (10976 of 38080)
+C1.7UGsRanges <- ppsn@assays$peaks@links[ppsn@assays$peaks@links$gene %in% C1.7UGs]
+
+# Subset the peaks to those overlapping with their linked gene's promoter (8130 of 10976)
+promoter_overlapped_peaks = subsetByOverlaps(
+  StringToGRanges(C1.7UGsRanges$peak),
+  StringToGRanges(C1.7UGsRanges$promoter)) %>% paste() %>% str_replace_all(":", "-") %>% unique()
+
+write.Peaks.To.Fasta(fileName = paste0(Project_Path,"MotifAnalysis/linked_peaks_from_promoters_set.fasta"),
+                     peaks = promoter_overlapped_peaks)
+write.Peaks.To.Fasta(fileName = paste0(Project_Path,"MotifAnalysis/BackgroundPeaks_for_linked_peaks_from_promoters_set.fasta"),
+                     peaks = getBackgroundPeaks(object = ppsn,
+                                                differentially_accessible = promoter_overlapped_peaks))
+
+# Submit the linked_peaks_from_promoters_set.fasta and BackgroundPeaks_for_linked_peaks_from_promoters_set.fasta to MEME Suite, using the XTREME method:
+# xstreme --oc . --time 240 --streme-totallength 4000000 --meme-searchsize 100000 --dna --evt 0.05 --minw 6 --maxw 15 --align center --meme-mod zoops --sea-noseqs --m db/motif_databases/JASPAR/JASPAR2022_CORE_plants_non-redundant_v2.meme --p linked_peaks_from_promoters.fasta -n BackgroundPeaks_for_linked_peaks_from_promoters.fasta
+```
+
+
+```{r After XTREME}
+read_meme_as_PWM <- function(directory = NULL) {
+  # Step 1: Read a MEME-formatted file into the universalmotif package
+  temp_meme <- universalmotif::read_meme(file = paste0(directory, "/combined.meme"))
+
+  # Step 2: Loop through each motif in the MEME object and save a plot for visualization
+  for (i in 1:length(temp_meme)) {
+    ggplot2::ggsave(
+      filename = paste0(directory, "/combined_plots/", i, "-", temp_meme[[i]]@altname, ".svg"),
+      plot = view_motifs(temp_meme[i]) + 
+        theme_void() + 
+        theme(legend.position = "none"), height = 0.1, width = 0.7 
+    )
+  }
+
+  # Step 3: Convert the motifs from MEME format to a Position Probability Matrix (PPM)
+  temp_PPM <- universalmotif::convert_type(temp_meme, type = 'PPM')
+
+  # Step 4: Write the PPM as a temporary JASPAR-formatted file
+  temp_jaspar <- tempfile()  # Create a temporary file
+  universalmotif::write_jaspar(temp_PPM, file = temp_jaspar)
+
+  # Step 5: Read the JASPAR file into the TFBSTools package as a Position Weight Matrix (PWM)
+  temp_jaspar <- TFBSTools::readJASPARMatrix(
+    fn = temp_jaspar, 
+    matrixClass = c("PFM", "PWM", "PWMProb")  # Specify the accepted matrix classes
+  )
+  
+  # Step 6: Convert the JASPAR object into a PWM (Position Weight Matrix) format
+  temp_PWM <- TFBSTools::toPWM(temp_jaspar)
+
+  # Step 7: Return the PWM object
+  return(temp_PWM)
+}
+
+
+# Download Gzipped TAR file of all output following extreme and 
+linked_up_motifs <-read_meme_as_PWM("~/Downloads/appXSTREME_5.5.71742887279446-987190149/")
+
+if(DefaultAssay(ppsn) != "peaks"){DefaultAssay(ppsn) <- "peaks"}
+ppsn <- AddMotifs(ppsn,genome = BSgenome.Ppatens.v6,pfm = c(linked_up_motifs))
+ppsn <- RunChromVAR(ppsn, genome = BSgenome.Ppatens.v6)
+DefaultAssay(ppsn) <- 'chromvar'
+ppsn@meta.data <- ppsn@meta.data %>% mutate(seurat_clusters_2digit = sprintf("%02d", as.integer(as.character(wsnn_res.0.4))))
+
+clusts0_5 <- subset(ppsn, subset = wsnn_res.0.4 %in% 0:5)
+clusts6_10 <- subset(ppsn, subset = wsnn_res.0.4 %in% 6:10)
+
+clusts0_5 <- ScaleData(clusts0_5, features = names(linked_up_motifs), assay = 'chromvar')
+clusts6_10 <- ScaleData(clusts6_10, features = names(linked_up_motifs), assay = 'chromvar')
+
+p1 <- DoMultiBarHeatmap(clusts0_5,
+                        assay = 'chromvar',
+                        features = names(linked_up_motifs),
+                        group.by = "seurat_clusters_2digit",
+                        additional.group.by = 'genotype') +
+  scale_y_discrete(position = "left", 
+                   labels = as.expression(sapply(seq_along(names(linked_up_motifs)), 
+                                                 function(i) {bquote(italic(.(str_replace(names(linked_up_motifs)[i], "-", "_"))))}))) +
+  scale_fill_viridis() + theme(legend.position = "none", axis.text.y = element_text(size = 5))
+
+p2 <- DoMultiBarHeatmap(clusts6_10,
+                        assay = 'chromvar',
+                        features = names(linked_up_motifs),
+                        group.by = "seurat_clusters_2digit",
+                        additional.group.by = 'genotype') +
+  scale_y_discrete(position = "left", 
+                   labels = as.expression(sapply(seq_along(names(linked_up_motifs)), 
+                                                 function(i) {bquote(italic(.(str_replace(names(linked_up_motifs)[i], "-", "_"))))}))) +
+  scale_fill_viridis() + theme(legend.position = "none", axis.text.y = element_text(size = 5))
+```
